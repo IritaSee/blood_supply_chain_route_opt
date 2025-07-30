@@ -413,16 +413,25 @@ class BloodSupplyChainEDA:
             
             # Box plots for outlier detection
             if len(numerical_cols) > 0:
-                fig, ax = plt.subplots(figsize=(15, 8))
-                self.data[numerical_cols].boxplot(ax=ax)
-                ax.set_title('Box Plots - Outlier Detection')
-                ax.set_xlabel('Variables')
-                ax.set_ylabel('Values')
-                plt.xticks(rotation=45)
+                # Filter columns with sufficient data
+                valid_cols = []
+                for col in numerical_cols:
+                    if self.data[col].dropna().nunique() > 1:
+                        valid_cols.append(col)
                 
-                self.save_figure(fig, "08_numerical_boxplots", 
-                               "Box Plots for Outlier Detection")
-                plt.show()
+                if valid_cols:
+                    fig, ax = plt.subplots(figsize=(15, 8))
+                    self.data[valid_cols].boxplot(ax=ax)
+                    ax.set_title('Box Plots - Outlier Detection')
+                    ax.set_xlabel('Variables')
+                    ax.set_ylabel('Values')
+                    plt.xticks(rotation=45)
+                    
+                    self.save_figure(fig, "08_numerical_boxplots", 
+                                   "Box Plots for Outlier Detection")
+                    plt.show()
+                else:
+                    print("No suitable numerical columns for box plot analysis.")
         else:
             print("No numerical columns found in the dataset.")
     
