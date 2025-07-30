@@ -165,7 +165,7 @@ class BloodSupplyChainEDA:
         plt.tight_layout()
         self.save_figure(fig, "01_missing_values_analysis", 
                         "Missing Values Analysis for Blood Supply Chain Data")
-        plt.show()
+        #plt.show()
     
     def geographical_analysis(self):
         """
@@ -221,7 +221,7 @@ class BloodSupplyChainEDA:
             plt.tight_layout()
             self.save_figure(fig, "02_geographical_distribution", 
                            "Geographical Distribution Analysis")
-            plt.show()
+            #plt.show()
             
             # If we have lat/lng, create a scatter plot
             lat_cols = [col for col in location_cols if 'lat' in col.lower()]
@@ -237,7 +237,7 @@ class BloodSupplyChainEDA:
                 
                 self.save_figure(fig, "03_geographic_scatter_plot", 
                                "Geographic Scatter Plot of Collection Points")
-                plt.show()
+                #plt.show()
         else:
             print("No obvious location columns found in the dataset.")
     
@@ -289,7 +289,7 @@ class BloodSupplyChainEDA:
             plt.tight_layout()
             self.save_figure(fig, "04_capacity_analysis", 
                            "Capacity and Operational Metrics Analysis")
-            plt.show()
+            #plt.show()
             
             # Correlation analysis if multiple capacity columns
             if len(capacity_cols) > 1:
@@ -300,7 +300,7 @@ class BloodSupplyChainEDA:
                 
                 self.save_figure(fig, "05_capacity_correlation", 
                                "Capacity Metrics Correlation Analysis")
-                plt.show()
+                #plt.show()
         else:
             print("No obvious capacity/operational columns found.")
     
@@ -355,7 +355,7 @@ class BloodSupplyChainEDA:
                 plt.tight_layout()
                 filename = f"06_categorical_{col.lower().replace(' ', '_')}"
                 self.save_figure(fig, filename, f"Categorical Analysis - {col}")
-                plt.show()
+                #plt.show()
         else:
             print("No categorical columns found in the dataset.")
     
@@ -409,7 +409,7 @@ class BloodSupplyChainEDA:
             plt.tight_layout()
             self.save_figure(fig, "07_numerical_distributions", 
                            "Numerical Variables Distribution Analysis")
-            plt.show()
+            #plt.show()
             
             # Box plots for outlier detection
             if len(numerical_cols) > 0:
@@ -429,7 +429,7 @@ class BloodSupplyChainEDA:
                     
                     self.save_figure(fig, "08_numerical_boxplots", 
                                    "Box Plots for Outlier Detection")
-                    plt.show()
+                    #plt.show()
                 else:
                     print("No suitable numerical columns for box plot analysis.")
         else:
@@ -506,7 +506,7 @@ class BloodSupplyChainEDA:
         plt.tight_layout()
         self.save_figure(fig, "09_optimization_readiness", 
                         "Route Optimization Data Readiness Assessment")
-        plt.show()
+        #plt.show()
         
         return assessment
     
