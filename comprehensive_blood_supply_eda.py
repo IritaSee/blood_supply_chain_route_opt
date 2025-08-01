@@ -178,7 +178,7 @@ class ComprehensiveBloodSupplyChainEDA:
         plt.tight_layout()
         self.save_figure(fig, "00_comprehensive_overview", 
                         "Comprehensive Blood Supply Chain Data Overview")
-        plt.show()
+        #plt.show()
     
     def blood_supply_chain_analysis(self):
         """Analyze blood supply chain specific metrics"""
@@ -248,7 +248,7 @@ class ComprehensiveBloodSupplyChainEDA:
             plt.tight_layout()
             self.save_figure(fig, "15_blood_supply_chain_analysis", 
                            "Blood Types and Components Distribution Analysis")
-            plt.show()
+            #plt.show()
     
     def temporal_optimization_analysis(self):
         """Analyze temporal patterns for delivery optimization"""
@@ -325,7 +325,7 @@ class ComprehensiveBloodSupplyChainEDA:
                 plt.tight_layout()
                 filename = f"16_temporal_analysis_{sheet_name.lower().replace(' ', '_').replace('&', 'and')}"
                 self.save_figure(fig, filename, f"Temporal Analysis - {sheet_name}")
-                plt.show()
+                #plt.show()
         
         # Store temporal insights
         self.insights['temporal_patterns'] = temporal_insights
@@ -426,7 +426,7 @@ class ComprehensiveBloodSupplyChainEDA:
         plt.tight_layout()
         self.save_figure(fig, "17_optimization_readiness", 
                         "Route Optimization Readiness Assessment")
-        plt.show()
+        #plt.show()
         
         # Store readiness insights
         overall_readiness = np.mean(list(normalized_scores.values()))

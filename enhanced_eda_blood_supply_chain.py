@@ -143,7 +143,7 @@ class EnhancedBloodSupplyChainEDA:
         
         plt.tight_layout()
         self.save_figure(fig, "10_all_sheets_overview", "Complete Data Overview - All Sheets")
-        plt.show()
+        #plt.show()
         
         # Print detailed summary
         for sheet_name, data in self.all_data.items():
@@ -191,7 +191,7 @@ class EnhancedBloodSupplyChainEDA:
             
             plt.tight_layout()
             self.save_figure(fig, "11_blood_types_components", "Blood Types and Components Analysis")
-            plt.show()
+            #plt.show()
     
     def analyze_temporal_patterns(self):
         """
@@ -234,7 +234,7 @@ class EnhancedBloodSupplyChainEDA:
                     plt.tight_layout()
                     filename = f"12_temporal_patterns_{sheet_name.lower().replace(' ', '_')}"
                     self.save_figure(fig, filename, f"Temporal Patterns - {sheet_name}")
-                    plt.show()
+                    #plt.show()
                     
                     # Analyze time gaps and patterns
                     self.analyze_time_gaps(sheet_name, data)
@@ -282,7 +282,7 @@ class EnhancedBloodSupplyChainEDA:
             plt.tight_layout()
             filename = f"13_time_gaps_{sheet_name.lower().replace(' ', '_')}"
             self.save_figure(fig, filename, f"Time Gaps Analysis - {sheet_name}")
-            plt.show()
+            #plt.show()
     
     def analyze_delivery_delays(self):
         """
@@ -340,7 +340,7 @@ class EnhancedBloodSupplyChainEDA:
                     plt.tight_layout()
                     filename = f"14_delivery_delays_{sheet_name.lower().replace(' ', '_')}"
                     self.save_figure(fig, filename, f"Delivery Delays Analysis - {sheet_name}")
-                    plt.show()
+                    #plt.show()
         else:
             print("No delay-specific sheets found.")
     
