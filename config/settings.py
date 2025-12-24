@@ -10,7 +10,7 @@ VEHICLE_CONFIG = {
     'capacity_liters': 100,  # Blood product capacity in liters
     'avg_speed_kmh': 40,  # Average speed in urban areas (km/h)
     'fuel_consumption_per_km': 0.12,  # Liters per km
-    'fuel_price_per_liter': 10000,  # IDR (Indonesian Rupiah)
+    'fuel_price_per_liter': 12750,  # IDR (Indonesian Rupiah)
     'driver_cost_per_hour': 50000,  # IDR
     'vehicle_maintenance_cost_per_km': 500,  # IDR
 }
