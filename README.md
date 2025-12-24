@@ -1,4 +1,67 @@
-# Blood Supply Chain Route Optimization
+# Blood Supply Route Optimization (Malang)
+
+Genetic-algorithm optimizer for Malang Regency blood deliveries. Primary objective: minimize delivery time (makespan). Secondary: minimize total time, then fuel cost (12,750 IDR/L, ~9 km/L). Two identical vehicles, OSRM for real routes with haversine fallback.
+
+## What’s Included
+- Custom GA (no DEAP) with elitism, ordered crossover, swap mutation, and lexicographic fitness (makespan → total time → cost).
+- Data extraction from historical Excel files (`All Droping.xlsx`, `Data PMI.xlsx`) with cleaning for numeric distance/duration fields.
+- Geocoding via Nominatim with SQLite cache and rate limiting.
+- Routing matrix builder: OSRM table API (batched, cached) or pure haversine when `use_osrm=False`.
+- Pipeline orchestration to compare GA output vs historical baseline and save JSON results.
+- Self-contained demo using mock coordinates and haversine for fast runs.
+
+## Project Layout
+- [ga_optimizer/data_extractor.py](ga_optimizer/data_extractor.py) — parse/clean Excel sources, summarize facilities/trips.
+- [ga_optimizer/geocoder.py](ga_optimizer/geocoder.py) — cached Nominatim client (batch geocoding, rate-limit + backoff).
+- [ga_optimizer/routing.py](ga_optimizer/routing.py) — OSRM/haversine distance & duration matrices with caching.
+- [ga_optimizer/genetic_algorithm.py](ga_optimizer/genetic_algorithm.py) — 2-vehicle GA with makespan-first fitness and cost calculation.
+- [main.py](main.py) — end-to-end pipeline (extract → geocode → matrices → GA → save results).
+- [demo_ga_optimization.py](demo_ga_optimization.py) — quick demo with mock coordinates/haversine.
+- [test_standalone.py](test_standalone.py) — small GA correctness check.
+
+## Setup
+1) Python 3.9+ and OSRM internet access (if using OSRM).  
+2) Install deps:
+```bash
+pip install -r requirements.txt
+```
+
+## Quick Run (demo, no OSRM needed)
+Runs GA on mock coordinates and haversine matrices; prints routes and metrics.
+```bash
+python demo_ga_optimization.py
+```
+
+## Full Pipeline with OSRM
+Uses public OSRM (table API) for distance/time, geocodes all facilities, then runs GA.
+```bash
+python main.py
+```
+Notes:
+- Default `use_osrm=True`; set `OptimizationPipeline(use_osrm=False)` in `main.py` to force haversine if OSRM/network is slow.
+- Geocoding/routing caches are stored in `results/` (`geocode_cache.db`, `routing_cache.db`).
+- Many small clinics may be missing in OSM; add coordinates manually or reuse cached entries if needed.
+
+## Inputs & Outputs
+- Inputs: `All Droping.xlsx`, `Data PMI.xlsx` (already in repo root). Data extractor auto-detects columns and cleans numeric fields.
+- Outputs: `results/ga_results.json` and `results/comparison.json` (baseline vs GA) plus cache DBs.
+
+## GA Objective Details
+- Two identical vehicles; depot is the first location.
+- Fitness order: 1) minimize makespan ($\max$ route time), 2) minimize total time, 3) minimize fuel cost where $\text{cost} = \text{distance}_\text{km} \times (12750 / 9)$.
+- Penalties discourage empty routes and long detours; mutation keeps feasibility.
+
+## Tips
+- For quicker runs with OSRM: reduce `population_size`/`generations` in `OptimizationPipeline.optimize()`.
+- If OSRM rate limits, rerun after a pause; caches avoid recomputing successful legs.
+- To lock in known coordinates, pre-fill the geocode cache or bypass geocoding for those rows.
+
+## Status
+- Core GA and demo: working.  
+- OSRM pipeline: functional but depends on geocoding coverage; expect some missing clinics on public OSM.
+
+## Research Context
+Designed for blood distribution in Malang Regency: prioritize on-time delivery; cost tracked but secondary. Historical data informs baselines; two identical vehicles assumed.# Blood Supply Chain Route Optimization
 
 AI-based route optimization system using Genetic Algorithms for optimizing blood supply distribution in Malang Regency, Indonesia.
 
