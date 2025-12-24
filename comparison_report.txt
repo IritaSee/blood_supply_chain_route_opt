@@ -1,0 +1,60 @@
+================================================================================
+BLOOD SUPPLY ROUTE OPTIMIZATION - BASELINE vs GA COMPARISON
+================================================================================
+Generated: 2025-12-25 01:30:23
+
+HISTORICAL BASELINE METRICS
+--------------------------------------------------------------------------------
+Total Trips (historical): 287
+Average Distance per Trip: 77.31 km
+Total Historical Distance: 22186.60 km
+Min/Max Distance: 1.30 - 749.00 km
+Average Duration per Trip: 4.35 hours
+
+On-Time Delivery Rate: 25.4%
+  - On-time trips: 73
+  - Late trips: 214
+Average Lateness (late trips): 42.6 minutes
+
+Cost Analysis:
+  - Cost per km: IDR 1,417
+  - Average cost per trip: IDR 109,516
+  - Total historical cost: IDR 31,431,017
+
+
+GENETIC ALGORITHM RESULTS
+--------------------------------------------------------------------------------
+Number of Routes: 2
+Makespan (longest route): 4.30 hours
+Total Time (all routes): 6.83 hours
+Total Distance: 340.40 km
+Total Cost: IDR 482,208
+
+
+IMPROVEMENT METRICS
+--------------------------------------------------------------------------------
+Distance Reduction:
+  - Absolute: 0.00 km
+  - Percentage: 0.0%
+Cost Reduction:
+  - Absolute: IDR 0
+  - Percentage: 0.0%
+
+
+KEY INSIGHTS
+--------------------------------------------------------------------------------
+1. Historical on-time rate: 25.4%
+2. GA produces 2 optimized routes
+3. Expected distance reduction: 0.0%
+4. Estimated cost savings: IDR 0
+
+
+RECOMMENDATIONS
+--------------------------------------------------------------------------------
+1. Implement optimized GA routes to reduce delivery distance
+2. Monitor actual delivery times to validate GA predictions
+3. Use baseline lateness as improvement target
+4. Cost savings can fund vehicle maintenance/fuel reserves
+5. Consider Deep Learning model to predict delays proactively
+
+================================================================================
