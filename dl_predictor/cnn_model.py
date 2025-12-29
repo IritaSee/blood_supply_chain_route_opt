@@ -4,6 +4,7 @@
 
 import logging
 import numpy as np
+import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import tensorflow as tf
@@ -268,6 +269,33 @@ class DeliveryTimeCNN:
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
         self.model.save(filepath)
         logger.info(f"Model saved to {filepath}")
+
+    def export_history_to_csv(self, filepath: str):
+        """Export training history to CSV for offline analysis."""
+        if self.history is None:
+            logger.warning("No training history to export.")
+            return
+        history_dict = self.history.history
+        if not history_dict:
+            logger.warning("Training history is empty; skipping CSV export.")
+            return
+        df = pd.DataFrame(history_dict)
+        df.insert(0, 'epoch', range(1, len(df) + 1))
+        path = Path(filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(path, index=False)
+        logger.info(f"Training history saved to {path}")
+
+    def export_metrics_to_csv(self, metrics: Dict, filepath: str):
+        """Export evaluation metrics to CSV (single row)."""
+        if not metrics:
+            logger.warning("No metrics to export.")
+            return
+        df = pd.DataFrame([metrics])
+        path = Path(filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(path, index=False)
+        logger.info(f"Evaluation metrics saved to {path}")
     
     def load(self, filepath: str):
         """Load model from file."""

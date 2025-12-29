@@ -124,6 +124,12 @@ def train_model(data_file: str = "All Droping.xlsx",
     logger.info("\n=== Step 6: Saving Model & Results ===")
     save_path = Path(save_dir)
     save_path.mkdir(parents=True, exist_ok=True)
+
+    # Export training history and metrics to CSV for offline analysis
+    history_csv = save_path / 'training_history.csv'
+    metrics_csv = save_path / 'test_metrics.csv'
+    cnn.export_history_to_csv(str(history_csv))
+    cnn.export_metrics_to_csv(test_metrics, str(metrics_csv))
     
     # Save model
     model_file = save_path / 'final_model.keras'
@@ -152,6 +158,8 @@ def train_model(data_file: str = "All Droping.xlsx",
     
     logger.info(f"Model saved: {model_file}")
     logger.info(f"Results saved: {results_file}")
+    logger.info(f"Training history CSV: {history_csv}")
+    logger.info(f"Test metrics CSV: {metrics_csv}")
     
     logger.info("\n" + "=" * 80)
     logger.info("TRAINING COMPLETE")

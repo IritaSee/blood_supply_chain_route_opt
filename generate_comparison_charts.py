@@ -100,48 +100,84 @@ def get_ga_metrics():
 
 
 def get_dl_metrics():
-    """Train DL model and extract metrics."""
-    logger.info("Training Deep Learning predictor...")
+    """Extract DL metrics from saved results or train new model."""
+    logger.info("Loading Deep Learning predictor results...")
     
+    # First try to load from saved CSV
+    metrics_csv = Path('results/dl_models/test_metrics.csv')
+    if metrics_csv.exists():
+        try:
+            df = pd.read_csv(metrics_csv)
+            if len(df) > 0:
+                row = df.iloc[0]
+                logger.info("Loaded DL metrics from saved CSV")
+                return {
+                    'name': 'Deep Learning (1D CNN)',
+                    'test_samples': int(row.get('n_samples', 0)),
+                    'train_samples': 0,  # Not stored in metrics CSV
+                    'mae_minutes': float(row['mae']),
+                    'rmse_minutes': float(row['rmse']),
+                    'mape_percent': float(row.get('mape', 0)),
+                    'r2_score': float(row['r2_score']),
+                }
+        except Exception as e:
+            logger.warning(f"Could not load DL metrics from CSV: {e}")
+    
+    # If no saved results, train new model
+    logger.info("No saved DL results found, training new model...")
     try:
         # Prepare data
-        preprocessor = TripDataPreprocessor()
+        preprocessor = TripDataPreprocessor(file_path='All Droping.xlsx')
         data = preprocessor.prepare_data(
             target_col='duration_minutes',
-            sequence_length=DATA_CONFIG['SEQUENCE_LENGTH'],
-            test_size=DATA_CONFIG['TEST_SIZE'],
-            random_seed=42
+            sequence_length=DATA_CONFIG.get('sequence_length', 5),
+            test_size=DATA_CONFIG.get('test_size', 0.2),
+            random_seed=DATA_CONFIG.get('random_seed', 42)
         )
         
         X_train, y_train = data['X_train'], data['y_train']
         X_test, y_test = data['X_test'], data['y_test']
         
         # Build and train model
-        cnn = DeliveryTimeCNN(
-            conv_filters=MODEL_CONFIG['CONV_FILTERS'],
-            kernel_sizes=MODEL_CONFIG['KERNEL_SIZES'],
-            pool_sizes=MODEL_CONFIG['POOL_SIZES'],
-            dense_units=MODEL_CONFIG['DENSE_UNITS'],
-            dropout_rate=MODEL_CONFIG['DROPOUT_RATE']
+        config = {
+            **MODEL_CONFIG,
+            **TRAINING_CONFIG,
+            'model_dir': 'results/dl_models',
+        }
+        
+        cnn = DeliveryTimeCNN(config=config)
+        cnn.build_model(
+            input_shape=(X_train.shape[1], X_train.shape[2]),
+            conv_filters=MODEL_CONFIG.get('conv_filters', [32, 64, 32]),
+            kernel_sizes=MODEL_CONFIG.get('kernel_sizes', [3, 3, 3]),
+            pool_sizes=MODEL_CONFIG.get('pool_sizes', [1, 1, 1]),
+            dense_units=MODEL_CONFIG.get('dense_units', [64, 32]),
+            dropout_rate=MODEL_CONFIG.get('dropout_rate', 0.3)
         )
         
-        cnn.build_model(
-            input_shape=(X_train.shape[1], X_train.shape[2])
+        cnn.compile_model(
+            learning_rate=TRAINING_CONFIG.get('learning_rate', 0.001),
+            optimizer=TRAINING_CONFIG.get('optimizer', 'adam'),
+            loss=TRAINING_CONFIG.get('loss', 'mse'),
+            metrics=TRAINING_CONFIG.get('metrics', ['mae', 'mse'])
         )
-        cnn.compile_model(learning_rate=TRAINING_CONFIG['LEARNING_RATE'])
         
         # Train with reduced verbosity
         history = cnn.train(
             X_train, y_train,
-            epochs=TRAINING_CONFIG['EPOCHS'],
-            batch_size=TRAINING_CONFIG['BATCH_SIZE'],
-            validation_split=TRAINING_CONFIG['VALIDATION_SPLIT'],
-            patience=TRAINING_CONFIG['EARLY_STOPPING_PATIENCE'],
+            epochs=20,  # Quick training for chart generation
+            batch_size=TRAINING_CONFIG.get('batch_size', 32),
+            validation_split=DATA_CONFIG.get('validation_split', 0.15),
             verbose=0
         )
         
         # Evaluate
         metrics = cnn.evaluate(X_test, y_test)
+        
+        # Save metrics for future use
+        save_dir = Path('results/dl_models')
+        save_dir.mkdir(parents=True, exist_ok=True)
+        cnn.export_metrics_to_csv(metrics, str(save_dir / 'test_metrics.csv'))
         
         return {
             'name': 'Deep Learning (1D CNN)',
@@ -150,12 +186,14 @@ def get_dl_metrics():
             'mae_minutes': metrics['mae'],
             'rmse_minutes': metrics['rmse'],
             'mape_percent': metrics.get('mape', 0),
-            'r2_score': metrics['r2'],
+            'r2_score': metrics['r2_score'],
             'model': cnn,
             'history': history,
         }
     except Exception as e:
-        logger.error(f"Error training DL model: {e}")
+        logger.error(f"Error with DL model: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -360,7 +398,7 @@ def create_dl_performance(dl_metrics):
     info_text = f"""
     1D CNN Time Prediction Model Performance
     
-    Training Samples: {dl_metrics['train_samples']}
+    Training Samples: {dl_metrics.get('train_samples', 'N/A')}
     Test Samples: {dl_metrics['test_samples']}
     
     Mean Absolute Error (MAE): {dl_metrics['mae_minutes']:.2f} minutes
@@ -369,12 +407,12 @@ def create_dl_performance(dl_metrics):
     R² Score: {dl_metrics['r2_score']:.4f}
     
     Model Architecture:
-    • Input: (sequence_length={DATA_CONFIG['SEQUENCE_LENGTH']}, features=7)
-    • Conv1D Filters: {MODEL_CONFIG['CONV_FILTERS']}
-    • Dense Units: {MODEL_CONFIG['DENSE_UNITS']}
-    • Dropout Rate: {MODEL_CONFIG['DROPOUT_RATE']}
-    • Training Epochs: {TRAINING_CONFIG['EPOCHS']}
-    • Batch Size: {TRAINING_CONFIG['BATCH_SIZE']}
+    • Input: (sequence_length={DATA_CONFIG.get('sequence_length', 10)}, features=7)
+    • Conv1D Filters: {MODEL_CONFIG.get('conv_filters', [32, 64, 32])}
+    • Dense Units: {MODEL_CONFIG.get('dense_units', [64, 32])}
+    • Dropout Rate: {MODEL_CONFIG.get('dropout_rate', 0.3)}
+    • Training Epochs: {TRAINING_CONFIG.get('epochs', 100)}
+    • Batch Size: {TRAINING_CONFIG.get('batch_size', 32)}
     """
     
     ax.text(0.1, 0.9, info_text, transform=ax.transAxes, fontsize=10,

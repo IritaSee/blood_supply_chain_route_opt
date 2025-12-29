@@ -11,9 +11,12 @@ import pandas as pd
 import numpy as np
 
 from ga_optimizer.data_extractor import DataExtractor
-from ga_optimizer.geocoder import Geocoder
-from ga_optimizer.routing import OSRMRouter
+from ga_optimizer import geocoder as ga_geocoder
+from ga_optimizer import routing as ga_routing
 from ga_optimizer.genetic_algorithm import GeneticAlgorithm
+from dl_predictor.data_preprocessor import TripDataPreprocessor
+from dl_predictor.cnn_model import DeliveryTimeCNN
+from config.dl_config import MODEL_CONFIG, TRAINING_CONFIG, DATA_CONFIG
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,8 +41,8 @@ class OptimizationPipeline:
         self.use_osrm = use_osrm
         
         self.extractor = DataExtractor(pmi_file, droping_file)
-        self.geocoder = Geocoder(cache_file=str(self.output_dir / "geocode_cache.db"))
-        self.router = OSRMRouter(
+        self.geocoder = ga_geocoder.Geocoder(cache_file=str(self.output_dir / "geocode_cache.db"))
+        self.router = ga_routing.OSRMRouter(
             cache_file=str(self.output_dir / "routing_cache.db"),
             use_osrm=use_osrm
         )
@@ -48,6 +51,8 @@ class OptimizationPipeline:
         self.duration_matrix = None
         self.distance_matrix = None
         self.ga_results = None
+        self.dl_model = None
+        self.dl_metrics = None
         
         logger.info(f"Pipeline initialized (OSRM: {use_osrm})")
     
@@ -190,12 +195,101 @@ class OptimizationPipeline:
         best_solution = ga.run()
         self.ga_results = ga.get_best_solution_details()
         
-        logger.info(f"Optimization complete!")
-        logger.info(f"Best makespan: {self.ga_results['makespan_s'] / 3600:.2f} hours")
-        logger.info(f"Total cost: {self.ga_results['total_cost_idr']:.0f} IDR")
-        logger.info(f"Total distance: {self.ga_results['total_distance_km']:.1f} km")
+        if not self.ga_results:
+            logger.warning("Optimization finished but no feasible solution was recorded (ga_results empty)")
+            return {}
+
+        logger.info("Optimization complete!")
+        logger.info(f"Best makespan: {self.ga_results.get('makespan_s', 0) / 3600:.2f} hours")
+        logger.info(f"Total cost: {self.ga_results.get('total_cost_idr', 0):.0f} IDR")
+        logger.info(f"Total distance: {self.ga_results.get('total_distance_km', 0):.1f} km")
         
         return self.ga_results
+    
+    def train_dl_predictor(self, train_dl: bool = True,
+                          epochs: int = None) -> Dict:
+        """Train or load DL time predictor."""
+        logger.info("=== STEP 5B: Deep Learning Time Predictor ===")
+        
+        if not train_dl:
+            logger.info("Skipping DL training (train_dl=False)")
+            return {}
+        
+        epochs = epochs or TRAINING_CONFIG.get('epochs', 50)
+        
+        # Prepare data
+        logger.info("Preparing data for DL training...")
+        preprocessor = TripDataPreprocessor(file_path=self.droping_file)
+        data = preprocessor.prepare_data(
+            target_col='duration_minutes',
+            sequence_length=DATA_CONFIG.get('sequence_length', 5),
+            test_size=DATA_CONFIG.get('test_size', 0.2),
+            random_seed=DATA_CONFIG.get('random_seed', 42)
+        )
+        
+        X_train = data['X_train']
+        y_train = data['y_train']
+        X_test = data['X_test']
+        y_test = data['y_test']
+        
+        logger.info(f"Training samples: {len(X_train)}, Test samples: {len(X_test)}")
+        
+        # Build model
+        logger.info("Building 1D CNN model...")
+        input_shape = (X_train.shape[1], X_train.shape[2])
+        
+        config = {
+            **MODEL_CONFIG,
+            **TRAINING_CONFIG,
+            'model_dir': str(self.output_dir / 'dl_models'),
+        }
+        
+        cnn = DeliveryTimeCNN(config=config)
+        cnn.build_model(
+            input_shape=input_shape,
+            conv_filters=MODEL_CONFIG.get('conv_filters', [32, 64]),
+            kernel_sizes=MODEL_CONFIG.get('kernel_sizes', [3, 3]),
+            pool_sizes=MODEL_CONFIG.get('pool_sizes', [1, 1]),
+            dense_units=MODEL_CONFIG.get('dense_units', [64, 32]),
+            dropout_rate=MODEL_CONFIG.get('dropout_rate', 0.3),
+        )
+        
+        # Compile
+        cnn.compile_model(
+            learning_rate=TRAINING_CONFIG.get('learning_rate', 0.001),
+            optimizer=TRAINING_CONFIG.get('optimizer', 'adam'),
+            loss=TRAINING_CONFIG.get('loss', 'mse'),
+            metrics=TRAINING_CONFIG.get('metrics', ['mae', 'mse'])
+        )
+        
+        # Train
+        logger.info(f"Training DL model for {epochs} epochs...")
+        cnn.train(
+            X_train,
+            y_train,
+            epochs=epochs,
+            batch_size=TRAINING_CONFIG.get('batch_size', 32),
+            validation_split=DATA_CONFIG.get('validation_split', 0.15),
+            verbose=0
+        )
+        
+        # Evaluate
+        logger.info("Evaluating DL model...")
+        metrics = cnn.evaluate(X_test, y_test)
+        
+        logger.info(f"DL Test MAE: {metrics['mae']:.2f} minutes")
+        logger.info(f"DL Test RMSE: {metrics['rmse']:.2f} minutes")
+        logger.info(f"DL Test R²: {metrics['r2_score']:.4f}")
+        
+        # Save model
+        model_file = self.output_dir / 'dl_models' / 'trained_model.keras'
+        cnn.save(str(model_file))
+        logger.info(f"DL model saved to {model_file}")
+        
+        self.dl_model = cnn
+        self.dl_metrics = metrics
+        
+        return metrics
     
     def save_results(self, baseline: Dict):
         """Save optimization results to JSON/CSV."""
@@ -247,9 +341,27 @@ class OptimizationPipeline:
                 json.dump(comparison, f, indent=2)
             
             logger.info(f"Comparison saved to {comp_file}")
+        
+        # Save DL metrics if available
+        if self.dl_metrics:
+            dl_results = {
+                'test_mae_minutes': self.dl_metrics['mae'],
+                'test_rmse_minutes': self.dl_metrics['rmse'],
+                'test_mape_percent': self.dl_metrics['mape'],
+                'test_r2_score': self.dl_metrics['r2_score'],
+                'n_test_samples': self.dl_metrics['n_samples'],
+            }
+            
+            dl_file = self.output_dir / "dl_results.json"
+            with open(dl_file, 'w') as f:
+                json.dump(dl_results, f, indent=2)
+            
+            logger.info(f"DL results saved to {dl_file}")
     
     def run_full_pipeline(self, population_size: int = 150, 
-                         generations: int = 800) -> Dict:
+                         generations: int = 800,
+                         train_dl: bool = True,
+                         dl_epochs: int = 50) -> Dict:
         """Execute full optimization pipeline."""
         logger.info("\n" + "="*60)
         logger.info("BLOOD SUPPLY ROUTING OPTIMIZATION PIPELINE")
@@ -269,8 +381,20 @@ class OptimizationPipeline:
         # Step 4: Extract baseline
         baseline = self.extract_baseline(summary['trip_history'])
         
-        # Step 5: Optimize
+        # Step 5: Optimize with GA
         ga_results = self.optimize(population_size, generations)
+        
+        # Step 5B: Train DL Predictor (optional)
+        dl_metrics = {}
+        if train_dl:
+            try:
+                dl_metrics = self.train_dl_predictor(
+                    train_dl=True,
+                    epochs=dl_epochs
+                )
+            except Exception as e:
+                logger.warning(f"DL training failed: {e}")
+                logger.warning("Continuing without DL predictions")
         
         # Step 6: Save results
         self.save_results(baseline)
@@ -284,12 +408,19 @@ class OptimizationPipeline:
             'locations': geocoded,
             'baseline': baseline,
             'ga_results': ga_results,
+            'dl_metrics': dl_metrics,
         }
 
 
 if __name__ == '__main__':
+    # Run with DL predictor enabled
     pipeline = OptimizationPipeline(use_osrm=True)
-    results = pipeline.run_full_pipeline(population_size=150, generations=800)
+    results = pipeline.run_full_pipeline(
+        population_size=150,
+        generations=800,
+        train_dl=True,  # Enable DL time prediction
+        dl_epochs=50    # Quick training for demo
+    )
 
 from src.data.loader import DataLoader
 from src.data.models import Location
