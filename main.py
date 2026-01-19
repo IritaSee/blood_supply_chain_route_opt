@@ -16,6 +16,7 @@ from ga_optimizer import routing as ga_routing
 from ga_optimizer.genetic_algorithm import GeneticAlgorithm
 from dl_predictor.data_preprocessor import TripDataPreprocessor
 from dl_predictor.cnn_model import DeliveryTimeCNN
+from dl_predictor.route_selector import DeepLearningRouteSelector
 from config.dl_config import MODEL_CONFIG, TRAINING_CONFIG, DATA_CONFIG
 
 logging.basicConfig(
@@ -358,14 +359,184 @@ class OptimizationPipeline:
             
             logger.info(f"DL results saved to {dl_file}")
     
+    def optimize_with_dl_selection(self, num_candidates: int = 100) -> Dict:
+        """
+        Run DL-based route selection (Approach B in Parallel Competitive Model).
+        
+        Args:
+            num_candidates: Number of candidate routes to generate and evaluate
+        
+        Returns:
+            Dict with DL selection results
+        """
+        logger.info("=== STEP 5C: DL Route Selection ===")
+        
+        if self.duration_matrix is None or self.distance_matrix is None:
+            raise ValueError("Matrices not built")
+        
+        if self.dl_model is None:
+            logger.warning("DL model not trained. Skipping DL route selection.")
+            return {}
+        
+        num_customers = len(self.locations) - 1
+        num_vehicles = 2
+        
+        logger.info(f"DL Route Selection: {num_customers} customers, {num_vehicles} vehicles")
+        logger.info(f"Generating {num_candidates} candidate routes...")
+        
+        # Initialize DL Route Selector
+        dl_selector = DeepLearningRouteSelector(
+            cnn_model=self.dl_model,
+            duration_matrix=self.duration_matrix,
+            distance_matrix=self.distance_matrix,
+            num_candidates=num_candidates
+        )
+        
+        # Select best route from candidates
+        best_routes, best_metrics = dl_selector.select_best_route(
+            num_customers=num_customers,
+            num_vehicles=num_vehicles,
+            time_weight=0.7,
+            cost_weight=0.3
+        )
+        
+        # Store results
+        self.dl_selection_results = {
+            'num_candidates': num_candidates,
+            'best_routes': best_routes,
+            'total_time_h': best_metrics['total_time_h'],
+            'total_distance_km': best_metrics['total_distance_km'],
+            'total_cost_idr': best_metrics['total_cost_idr'],
+            'avg_lateness_risk': best_metrics['avg_lateness_risk'],
+            'vehicle_metrics': best_metrics['vehicle_metrics']
+        }
+        
+        logger.info("DL Selection complete!")
+        logger.info(f"Best route found (from {num_candidates} candidates):")
+        logger.info(f"  Time: {best_metrics['total_time_h']:.2f} hours")
+        logger.info(f"  Distance: {best_metrics['total_distance_km']:.1f} km")
+        logger.info(f"  Cost: IDR {best_metrics['total_cost_idr']:,.0f}")
+        logger.info(f"  Lateness Risk: {best_metrics['avg_lateness_risk']:.3f}")
+        
+        return self.dl_selection_results
+    
+    def generate_comparison_report(self, baseline: Dict) -> str:
+        """
+        Generate comparison report: GA vs DL vs Baseline.
+        
+        Args:
+            baseline: Historical baseline metrics
+        
+        Returns:
+            Path to comparison report file
+        """
+        logger.info("=== STEP 6: Generate Comparison Report ===")
+        
+        report_lines = []
+        report_lines.append("="*80)
+        report_lines.append("PARALLEL COMPETITIVE MODEL - COMPARISON REPORT")
+        report_lines.append("Blood Supply Route Optimization - PMI Kabupaten Malang")
+        report_lines.append("="*80)
+        report_lines.append("")
+        
+        # Baseline
+        report_lines.append("HISTORICAL BASELINE:")
+        report_lines.append(f"  Number of trips: {baseline.get('num_trips', 0)}")
+        report_lines.append(f"  Average distance: {baseline.get('avg_distance_km', 0):.1f} km")
+        report_lines.append(f"  Average cost: IDR {baseline.get('avg_cost_idr', 0):,.0f}")
+        report_lines.append(f"  On-time percentage: {baseline.get('on_time_percentage', 0):.1f}%")
+        report_lines.append("")
+        
+        # Approach A: Genetic Algorithm
+        report_lines.append("APPROACH A: GENETIC ALGORITHM (GA)")
+        report_lines.append("  Mechanism: Evolutionary optimization")
+        report_lines.append("  Process: Population -> Selection -> Crossover -> Mutation")
+        if self.ga_results:
+            report_lines.append(f"  Total Distance: {self.ga_results.get('total_distance_km', 0):.1f} km")
+            report_lines.append(f"  Total Time: {self.ga_results.get('makespan_s', 0) / 3600:.2f} hours")
+            report_lines.append(f"  Total Cost: IDR {self.ga_results.get('total_cost_idr', 0):,.0f}")
+            report_lines.append(f"  Number of routes: {self.ga_results.get('num_routes', 0)}")
+        else:
+            report_lines.append("  [NO RESULTS - GA not run]")
+        report_lines.append("")
+        
+        # Approach B: DL Route Selector
+        report_lines.append("APPROACH B: DEEP LEARNING ROUTE SELECTOR")
+        report_lines.append("  Mechanism: Predictive scoring of candidate routes")
+        report_lines.append("  Process: Candidate Generation -> Prediction -> Selection")
+        if hasattr(self, 'dl_selection_results') and self.dl_selection_results:
+            report_lines.append(f"  Candidates evaluated: {self.dl_selection_results.get('num_candidates', 0)}")
+            report_lines.append(f"  Total Distance: {self.dl_selection_results.get('total_distance_km', 0):.1f} km")
+            report_lines.append(f"  Predicted Time: {self.dl_selection_results.get('total_time_h', 0):.2f} hours")
+            report_lines.append(f"  Total Cost: IDR {self.dl_selection_results.get('total_cost_idr', 0):,.0f}")
+            report_lines.append(f"  Lateness Risk: {self.dl_selection_results.get('avg_lateness_risk', 0):.3f}")
+        else:
+            report_lines.append("  [NO RESULTS - DL Selection not run]")
+        report_lines.append("")
+        
+        # Comparison
+        report_lines.append("="*80)
+        report_lines.append("WINNER DETERMINATION")
+        report_lines.append("="*80)
+        
+        if self.ga_results and hasattr(self, 'dl_selection_results') and self.dl_selection_results:
+            ga_score = (0.7 * (self.ga_results.get('makespan_s', 0) / 3600) + 
+                       0.3 * (self.ga_results.get('total_cost_idr', 0) / 1000000))
+            dl_score = (0.7 * self.dl_selection_results.get('total_time_h', 0) + 
+                       0.3 * (self.dl_selection_results.get('total_cost_idr', 0) / 1000000))
+            
+            report_lines.append(f"GA Score (70% Time + 30% Cost): {ga_score:.4f}")
+            report_lines.append(f"DL Score (70% Time + 30% Cost): {dl_score:.4f}")
+            report_lines.append("")
+            
+            if ga_score < dl_score:
+                winner = "GENETIC ALGORITHM (GA)"
+                improvement = ((dl_score - ga_score) / dl_score) * 100
+            else:
+                winner = "DEEP LEARNING ROUTE SELECTOR"
+                improvement = ((ga_score - dl_score) / ga_score) * 100
+            
+            report_lines.append(f"WINNER: {winner}")
+            report_lines.append(f"Improvement over other method: {improvement:.1f}%")
+        else:
+            report_lines.append("Cannot determine winner - missing results from one or both approaches")
+        
+        report_lines.append("")
+        report_lines.append("="*80)
+        
+        # Save report
+        report_path = self.output_dir / "comparison_report.txt"
+        with open(report_path, 'w') as f:
+            f.write('\n'.join(report_lines))
+        
+        logger.info(f"Comparison report saved to {report_path}")
+        
+        # Also print to console
+        for line in report_lines:
+            logger.info(line)
+        
+        return str(report_path)
+    
     def run_full_pipeline(self, population_size: int = 150, 
                          generations: int = 800,
                          train_dl: bool = True,
-                         dl_epochs: int = 50) -> Dict:
-        """Execute full optimization pipeline."""
+                         dl_epochs: int = 50,
+                         num_dl_candidates: int = 100,
+                         run_comparison: bool = True) -> Dict:
+        """
+        Execute full Parallel Competitive Model pipeline.
+        
+        Args:
+            population_size: GA population size
+            generations: GA generations
+            train_dl: Train DL model
+            dl_epochs: DL training epochs
+            num_dl_candidates: Number of candidates for DL route selection
+            run_comparison: Run both approaches and compare them
+        """
         logger.info("\n" + "="*60)
-        logger.info("BLOOD SUPPLY ROUTING OPTIMIZATION PIPELINE")
-        logger.info("Malang Regency, Indonesia - 2-Vehicle GA Optimization")
+        logger.info("PARALLEL COMPETITIVE MODEL - ROUTE OPTIMIZATION")
+        logger.info("Malang Regency, Indonesia")
         logger.info("="*60 + "\n")
         
         # Step 1: Extract data
@@ -381,10 +552,10 @@ class OptimizationPipeline:
         # Step 4: Extract baseline
         baseline = self.extract_baseline(summary['trip_history'])
         
-        # Step 5: Optimize with GA
+        # Step 5A: Optimize with GA (Approach A)
         ga_results = self.optimize(population_size, generations)
         
-        # Step 5B: Train DL Predictor (optional)
+        # Step 5B: Train DL Predictor
         dl_metrics = {}
         if train_dl:
             try:
@@ -395,8 +566,27 @@ class OptimizationPipeline:
             except Exception as e:
                 logger.warning(f"DL training failed: {e}")
                 logger.warning("Continuing without DL predictions")
+                run_comparison = False
         
-        # Step 6: Save results
+        # Step 5C: DL Route Selection (Approach B)
+        dl_selection_results = {}
+        if run_comparison and self.dl_model:
+            try:
+                dl_selection_results = self.optimize_with_dl_selection(
+                    num_candidates=num_dl_candidates
+                )
+            except Exception as e:
+                logger.warning(f"DL route selection failed: {e}")
+                logger.warning("Skipping comparison")
+                run_comparison = False
+        
+        # Step 6: Generate comparison report
+        if run_comparison:
+            comparison_report_path = self.generate_comparison_report(baseline)
+        else:
+            comparison_report_path = None
+        
+        # Save individual results
         self.save_results(baseline)
         
         logger.info("\n" + "="*60)
@@ -409,146 +599,53 @@ class OptimizationPipeline:
             'baseline': baseline,
             'ga_results': ga_results,
             'dl_metrics': dl_metrics,
+            'dl_selection_results': dl_selection_results,
+            'comparison_report': comparison_report_path,
         }
 
 
 if __name__ == '__main__':
-    # Run with DL predictor enabled
+    # Run Parallel Competitive Model with both GA and DL approaches
     pipeline = OptimizationPipeline(use_osrm=True)
     results = pipeline.run_full_pipeline(
         population_size=150,
         generations=800,
-        train_dl=True,  # Enable DL time prediction
-        dl_epochs=50    # Quick training for demo
+        train_dl=True,          # Enable DL training
+        dl_epochs=50,           # DL training epochs
+        num_dl_candidates=100,  # Number of candidates for DL route selection
+        run_comparison=True     # Compare both approaches
     )
 
-from src.data.loader import DataLoader
-from src.data.models import Location
-from src.routing.geocoding import Geocoder
-from src.routing.osrm_client import OSRMRouter
-from src.optimization.batching import DeliveryBatcher
-from src.optimization.genetic_algorithm import RouteOptimizer
-from src.utils.visualization import plot_routes, plot_optimization_metrics, generate_report
-from config.settings import OSRM_SERVER
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-
-def main():
-    """Main application entry point"""
-    logger.info("=" * 80)
-    logger.info("BLOOD SUPPLY CHAIN ROUTE OPTIMIZATION")
-    logger.info("Genetic Algorithm-based Optimization for Malang Regency, Indonesia")
-    logger.info("=" * 80)
+if __name__ == "__main__":
+    # Run the full pipeline
+    pipeline = OptimizationPipeline(use_osrm=True)
     
     try:
-        # Step 1: Load data
-        logger.info("\n[STEP 1] Loading data...")
-        data_loader = DataLoader(data_dir=".")
-        
-        # Load Excel files
-        df_droping = data_loader.load_all_droping_data("All Droping.xlsx")
-        logger.info(f"Loaded {len(df_droping)} records from All Droping.xlsx")
-        
-        # Extract locations
-        locations = data_loader.extract_locations_from_df(df_droping)
-        logger.info(f"Extracted {len(locations)} unique locations")
-        
-        # Step 2: Geocode locations (if needed)
-        logger.info("\n[STEP 2] Geocoding locations...")
-        geocoder = Geocoder()
-        
-        # For demo purposes, we'll use sample coordinates
-        # In production, uncomment the following to geocode real addresses:
-        # geocoder.geocode_locations_batch(locations[:5], delay=1.0)  # Limit to first 5 for demo
-        
-        # Add sample coordinates for demonstration
-        if locations:
-            # Central Malang coordinates as base
-            base_lat, base_lon = -8.1706, 112.6314
-            for i, loc in enumerate(locations[:10]):  # Limit to 10 for demo
-                # Add small random offsets to create a cluster
-                loc.latitude = base_lat + (i % 4 - 1.5) * 0.05
-                loc.longitude = base_lon + (i // 4 - 1) * 0.05
-            logger.info(f"Added sample coordinates to {min(10, len(locations))} locations")
-        
-        # Step 3: Create sample deliveries and vehicles
-        logger.info("\n[STEP 3] Creating deliveries and vehicles...")
-        deliveries = data_loader.create_sample_deliveries(num_deliveries=10)
-        vehicles = data_loader.create_sample_vehicles(num_vehicles=3)
-        
-        summary = data_loader.get_summary()
-        logger.info(f"Data summary: {summary}")
-        
-        # Step 4: Batch deliveries
-        logger.info("\n[STEP 4] Batching deliveries...")
-        batcher = DeliveryBatcher()
-        batches = batcher.create_optimized_batches(deliveries)
-        batch_stats = batcher.get_batch_statistics(batches)
-        logger.info(f"Batch statistics: {batch_stats}")
-        
-        # Step 5: Initialize router
-        logger.info("\n[STEP 5] Initializing OSRM router...")
-        router = OSRMRouter(server_url=OSRM_SERVER)
-        
-        # Step 6: Run optimization for first batch
-        logger.info("\n[STEP 6] Running genetic algorithm optimization...")
-        
-        # Use first batch for demonstration
-        batch_to_optimize = batches[0] if batches else deliveries
-        
-        optimizer = RouteOptimizer(
-            deliveries=batch_to_optimize,
-            vehicles=vehicles,
-            router=router
+        results = pipeline.run_full_pipeline(
+            population_size=150,
+            generations=800,
+            train_dl=True,
+            dl_epochs=50,
+            num_dl_candidates=100,
+            run_comparison=True
         )
         
-        result = optimizer.optimize(verbose=True)
-        
-        # Step 7: Display results
-        logger.info("\n[STEP 7] Optimization complete!")
-        logger.info(f"Total Distance: {result.total_distance_km:.2f} km")
-        logger.info(f"Total Time: {result.total_time_hours:.2f} hours")
-        logger.info(f"Total Cost: IDR {result.total_cost_idr:,.2f}")
-        logger.info(f"Fitness Score: {result.fitness_score:.4f}")
-        
-        # Generate detailed report
-        logger.info("\n[STEP 8] Generating reports and visualizations...")
-        
-        # Create output directory
-        output_dir = Path("output")
-        output_dir.mkdir(exist_ok=True)
-        
-        # Generate text report
-        report_path = output_dir / "optimization_report.txt"
-        generate_report(result, output_path=str(report_path))
-        
-        # Generate visualizations
-        metrics_path = output_dir / "optimization_metrics.png"
-        plot_optimization_metrics(result, save_path=str(metrics_path))
-        
-        routes_path = output_dir / "optimized_routes.png"
-        plot_routes(result.routes, save_path=str(routes_path))
-        
-        logger.info(f"\nResults saved to {output_dir}/")
-        logger.info("  - optimization_report.txt")
-        logger.info("  - optimization_metrics.png")
-        logger.info("  - optimized_routes.png")
-        
-        logger.info("\n" + "=" * 80)
-        logger.info("OPTIMIZATION COMPLETED SUCCESSFULLY!")
-        logger.info("=" * 80)
-        
-        return result
-        
+        if results:
+            logger.info("=" * 60)
+            logger.info("Pipeline completed successfully!")
+            logger.info("=" * 60)
+            logger.info(f"GA Results: {results.get('ga_results_path', 'N/A')}")
+            logger.info(f"DL Results: {results.get('dl_results_path', 'N/A')}")
+            if 'comparison_report' in results:
+                logger.info(f"Comparison Report: {results['comparison_report']}")
+                logger.info("\n" + "=" * 60)
+                logger.info("COMPARISON RESULTS:")
+                logger.info("=" * 60)
+                with open(results['comparison_report'], 'r') as f:
+                    print(f.read())
+        else:
+            logger.error("Pipeline failed to complete.")
+            
     except Exception as e:
-        logger.error(f"Error during optimization: {e}", exc_info=True)
+        logger.error(f"Pipeline error: {str(e)}", exc_info=True)
         raise
-
-
-if __name__ == "__main__":
-    main()

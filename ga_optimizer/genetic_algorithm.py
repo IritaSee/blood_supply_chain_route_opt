@@ -226,17 +226,16 @@ class GeneticAlgorithm:
         # Total cost
         total_cost = sum(vehicle_costs)
         
-        # Lexicographic fitness (lower is better)
+        # Weighted sum fitness (lower is better): Time 70%, Cost 30%
         # Scale for numerical stability
         makespan_norm = makespan / 3600  # Convert to hours
         time_norm = total_time / 3600
-        cost_norm = total_cost / 1000  # Convert to thousands of IDR
+        cost_norm = total_cost / 1000000  # Convert to millions of IDR
         
-        # Weighted lexicographic: makespan >> time >> cost
+        # Fitness: 70% Time + 30% Cost (per new specifications)
         fitness = (
-            1000000 * makespan_norm +  # Primary weight
-            1000 * time_norm +           # Secondary weight
-            cost_norm                    # Tertiary weight
+            0.7 * makespan_norm +  # 70% weight on time (makespan)
+            0.3 * cost_norm        # 30% weight on cost
         )
         
         details = {
