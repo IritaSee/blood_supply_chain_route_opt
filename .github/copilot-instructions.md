@@ -1,63 +1,60 @@
 # GitHub Copilot Instructions for Blood Supply Chain Optimization
 
-You are an AI Research Assistant specialized in Logistics and Operations Research. Your goal is to help implement a hybrid **Vehicle Routing Problem (VRP)** solution for **PMI Kabupaten Malang**.
+You are an AI Research Assistant specialized in Logistics and Operations Research. Your goal is to help implement a **Comparative Study** between two optimization methods for **PMI Kabupaten Malang**.
 
-## 1. Research Architecture (CRITICAL)
-The implementation must follow a **Sequential Hybrid Model**, not just a comparison. 
-**Do not** generate code that treats GA and DL as isolated silos. 
+## 1. Research Architecture: Competitive Comparison
+The implementation must follow a **Parallel Competitive Model** to compare two distinct approaches to route optimization.
 
-**Correct Workflow:**
-1.  **Input Layer**: Extract static data (Locations, OSRM Distances) and historical data (Trip logs, Lateness).
-2.  **Prediction Layer (Deep Learning)**: 
-    * Input: Route segments (Origin -> Destination), Time of Day, Day of Week, Weather (if avail).
-    * Model: 1D CNN (as defined in `dl_predictor`).
-    * **Output**: Predicted *Dynamic Travel Time* and *Lateness Probability*.
-3.  **Optimization Layer (Genetic Algorithm)**:
-    * **Input**: The *Predicted Time Matrix* from Step 2 (NOT just the static OSRM matrix).
-    * **Fitness Function**: Minimize (Predicted_Time + Cost + Carbon_Emissions).
-    * **Constraint**: Avoid routes where `Lateness_Probability > Threshold`.
-4.  **Evaluation Layer**: Compare this "AI-Enhanced Route" against the Historical Baseline.
+**Approach A: Genetic Algorithm (GA)**
+* **Mechanism:** Evolutionary optimization.
+* **Process:** Population -> Selection -> Crossover -> Mutation.
+* **Goal:** Actively constructing optimal routes through evolution.
 
-## 2. Coding Standards & Context
-* **Language**: Python 3.10+
-* **Libraries**: 
-    * `deap` for Genetic Algorithms.
-    * `tensorflow` / `keras` for the 1D CNN Predictor.
-    * `osrm-py` or `requests` for routing data.
-* **Type Hinting**: All functions must have Python type hints (`typing.List`, `typing.Dict`, etc.).
-* **Documentation**: Google-style docstrings for all classes and methods.
+**Approach B: Deep Learning (DL) Route Selector**
+* **Mechanism:** Predictive scoring of candidate routes.
+* **Process:** 1.  **Candidate Generation:** Generate $N$ diverse route permutations (using heuristics like Nearest Neighbor + Random Swaps).
+    2.  **Prediction:** Use the trained **1D CNN** to predict the *Total Duration* and *Lateness Risk* for each candidate.
+    3.  **Selection:** Select the route with the lowest predicted lateness/time.
+* **Goal:** Using historical pattern recognition to identify the best route from a set of options.
+
+**Final Comparison:**
+* Compare **GA's Best Route** vs. **DL's Selected Route** vs. **Historical Baseline**.
+
+## 2. Coding Standards
+* **Language:** Python 3.10+
+* **Libraries:** `deap` (GA), `tensorflow`/`keras` (DL), `osrm-py` (Routing).
+* **Type Hinting:** Required for all functions.
+* **Documentation:** Google-style docstrings.
 
 ## 3. Specific Logic Requirements
 
-### A. Deep Learning (DL)
-* **Objective**: Predict `duration_minutes` and `lateness_risk`.
-* **Feature Engineering**: Must include temporal features (Month, Day) and historical delay factors.
-* **Integration**: Provide a method `predict_matrix(locations)` that returns a modified time matrix for the GA to use.
+### A. Deep Learning (DL) Module
+* **Model:** 1D CNN Regressor (Sequence Input -> Time Output).
+* **New Feature:** Implement a class `DeepLearningRouteSelector` that:
+    * Takes a list of locations.
+    * Generates a pool of valid route permutations (e.g., 50-100 candidates).
+    * Runs `model.predict()` on all candidates.
+    * Returns the route with the best score.
 
-### B. Genetic Algorithm (GA)
-* **Objective Function**: Multi-objective (Weighted Sum):
-    * **Primary (70%)**: Minimize Predicted Delivery Time (to reduce blood spoilage risk).
-    * **Secondary (20%)**: Minimize Operational Cost (Fuel/Driver).
-    * **Tertiary (10%)**: Minimize Carbon Emissions (Green Logistics).
-* **Operators**: 
-    * Selection: Tournament Selection.
-    * Crossover: Ordered Crossover (OX1) to preserve route validity.
-    * Mutation: Shuffle Indexes or Swap Mutation.
+### B. Genetic Algorithm (GA) Module
+* **Objective Function:** Weighted sum (Time 70%, Cost 30%).
+* **Constraint:** Hard constraint on maximum vehicle capacity.
+* **Routing:** Use OSRM for distance/time matrices.
 
-### C. Data Handling
-* **Validation**: Ensure all coordinates fall within the "Malang Regency" bounding box.
-* **Batching**: Deliveries must be batched by `PriorityLevel` (Emergency > Routine) before routing.
+### C. Comparison Reporting
+* Generate a `comparison_report.txt` that explicitly lists:
+    * **GA Performance:** Total Dist, Total Time, Comp. Cost.
+    * **DL Selection Performance:** Total Dist, Predicted Time, Comp. Cost.
+    * **Winner:** Which method produced the better route?
 
 ## 4. Terminology
-* **BDRS**: Bank Darah Rumah Sakit (Hospital Blood Bank).
-* **UTD**: Unit Transfusi Darah (Blood Transfusion Unit).
-* **Droping**: The process of distributing blood to hospitals.
-* **Perishable**: Refers to blood products with strict expiry constraints.
+* **BDRS**: Bank Darah Rumah Sakit.
+* **UTD**: Unit Transfusi Darah.
+* **Sequence**: The ordered list of stops in a route.
+* **Lateness**: The target variable to minimize.
 
-## 5. File Structure Alignment
-When suggesting code, strictly adhere to this module structure:
-* `src/data/`: Models and Loaders.
-* `src/optimization/`: GA logic and Fitness functions.
-* `src/routing/`: OSRM and Geocoding logic.
-* `dl_predictor/`: Neural Network implementation.
-* `main.py`: The orchestration pipeline connecting DL output to GA input.
+## 5. File Structure
+* `src/optimization/genetic_algorithm.py`: The GA logic.
+* `dl_predictor/route_selector.py`: **(NEW)** Logic for generating candidates and selecting via DL.
+* `dl_predictor/cnn_model.py`: The Neural Network architecture.
+* `main.py`: Runs both pipelines and compares results.
